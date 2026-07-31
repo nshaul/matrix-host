@@ -1121,6 +1121,15 @@ def build_app(generator, bus, router):
                 status=400,
                 headers=CORS_HEADERS,
             )
+        # Shared-secret gate for publicly exposed pods: set STREAM_TOKEN on the box
+        # and append #<token> to the /offer URL in stream.html. Unset = open (dev).
+        expected_token = os.environ.get("STREAM_TOKEN", "")
+        if expected_token and params.get("token") != expected_token:
+            return web.json_response(
+                {"ok": False, "error": "bad or missing token (server has STREAM_TOKEN set)"},
+                status=401,
+                headers=CORS_HEADERS,
+            )
         peer = RTCPeerConnection()
         peers.add(peer)
 

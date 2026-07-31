@@ -138,6 +138,8 @@ export class GestureController {
     this.hands.right.setShape('open', 0.18)
   }
 
+  /** Raised fist, thumb out. Reads best at bust/waist framing (a to-camera
+   * thumbs-up is a mid-shot gesture; closeup crops the raised fist laterally). */
   thumbsUp(durationSeconds = 2.8): void {
     this.start('thumbsUp', durationSeconds)
     this.hands.right.setShape('thumbsUp', 0.16)
@@ -453,9 +455,13 @@ export class GestureController {
       // Same fold sign the wave verified (+z raises the forearm; −z buried the
       // fist at the hip): elbow low, forearm folded UP so the fist presents at
       // shoulder height, angled a touch toward the lens.
+      // Fist presented beside the cheek, wave-verified raise heights (+z folds
+      // the forearm UP), angled toward the lens so it reads in closeup framing.
       this.setRotation('rightUpperArm' as VRMHumanBoneName, -0.12 * env, -0.22 * env, -1.18 + env * 0.55)
       this.setRotation('rightLowerArm' as VRMHumanBoneName, 0, env * 0.42, -0.1 + env * 1.62)
-      this.setRotation('rightHand' as VRMHumanBoneName, 0, 0, 0.12 * env)
+      // Wrist rolled back so the extended thumb silhouettes at the fist's top
+      // edge instead of hiding against the knuckles (screenshot-tuned).
+      this.setRotation('rightHand' as VRMHumanBoneName, -0.55 * env, 0, 0.12 * env)
     } else if (active === 'point') {
       const env = envelope(gt, this.gestureDuration, 0.5, 0.55)
       const follow = this.aimHeadAngles()

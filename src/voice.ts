@@ -419,6 +419,8 @@ export class HostVoice {
 export type VoiceCommandAction =
   | { type: 'wave' }
   | { type: 'point' }
+  | { type: 'point-at'; x: number; y: number }
+  | { type: 'thumbs-up' }
   | { type: 'scold' }
   | { type: 'yell' }
   | { type: 'look'; yaw: number; pitch: number }
@@ -447,6 +449,16 @@ export function parseVoiceCommand(transcript: string): VoiceCommandAction | null
   }
 
   if (/\bwave\b/.test(text)) return { type: 'wave' }
+  if (/\bthumbs? up\b/.test(text)) return { type: 'thumbs-up' }
+  const corner = /\bpoint (?:to |at )?(?:the )?(top|bottom) (left|right)\b/.exec(text)
+  if (corner) {
+    return {
+      type: 'point-at',
+      x: corner[2] === 'right' ? 0.9 : 0.1,
+      y: corner[1] === 'top' ? 0.12 : 0.85,
+    }
+  }
+  if (/\bpoint at me\b|\bpoint (?:at|to) the camera\b/.test(text)) return { type: 'point-at', x: 0.5, y: 0.5 }
   if (/\bpoint\b/.test(text)) return { type: 'point' }
   if (/\bscold\b/.test(text)) return { type: 'scold' }
   if (/\byell\b/.test(text)) return { type: 'yell' }

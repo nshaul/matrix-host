@@ -239,11 +239,19 @@ async function connectWebRtc(
     const offer = await peer.createOffer()
     await peer.setLocalDescription(offer)
     await waitForIceGathering(peer)
-    const response = await fetch(offerUrl, {
+    // "https://pod/offer#secret" carries the STREAM_TOKEN shared secret; the
+    // fragment never appears in server access logs the way a query param would.
+    const [postUrl, token] = offerUrl.split('#', 2)
+    const response = await fetch(postUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sdp: peer.localDescription?.sdp, type: peer.localDescription?.type }),
+      body: JSON.stringify({
+        sdp: peer.localDescription?.sdp,
+        type: peer.localDescription?.type,
+        ...(token ? { token } : {}),
+      }),
     })
+    if (response.status === 401) throw new Error('server requires a token — append #<STREAM_TOKEN> to the URL')
     if (!response.ok) throw new Error(`offer rejected (${response.status})`)
     await peer.setRemoteDescription(await response.json())
   } catch (error) {

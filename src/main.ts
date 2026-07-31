@@ -1,5 +1,5 @@
 import { HologramHost } from './engine/HologramHost'
-import { HostVoice, VoiceCommands, type VoiceEngine } from './voice'
+import { HostVoice, VoiceCommands, parseVoiceCommand, type VoiceEngine } from './voice'
 
 const stage = document.getElementById('stage')
 if (!stage) throw new Error('missing #stage element')
@@ -13,9 +13,13 @@ declare global {
   interface Window {
     matrixHost: HologramHost
     hostVoice: HostVoice
+    parseVoiceCommand: typeof parseVoiceCommand
   }
 }
 window.matrixHost = host
+// Debug surface: lets external tooling (and headless verification) exercise the
+// real spoken-command grammar without a microphone.
+window.parseVoiceCommand = parseVoiceCommand
 
 const $ = <T extends HTMLElement>(id: string): T => {
   const el = document.getElementById(id)
@@ -180,6 +184,12 @@ const voiceCommands = new VoiceCommands({
         break
       case 'point':
         host.point()
+        break
+      case 'point-at':
+        host.pointAt(action.x, action.y, { durationSeconds: 3.5 })
+        break
+      case 'thumbs-up':
+        host.thumbsUp()
         break
       case 'scold':
         host.scold()

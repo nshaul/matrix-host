@@ -72,6 +72,7 @@ AWS instead: g6.xlarge with the Deep Learning AMI, security group open on
 | `SOURCE` | `reference.mp4` | source art: image or short video (bootstrap copies `../public/footage/reference.mp4`) |
 | `PORT` | `8788` | HTTP signalling port |
 | `TTS_VOICE` | `af_heart` | Kokoro voice id (first letter picks the language pack) |
+| `STREAM_TOKEN` | unset | Shared secret for `/offer`. When set, the client must use `https://pod/offer#<token>`; bad or missing token gets 401. Unset = open (dev only). |
 | `FPS` | 24 cpu / 25 models | output frame rate |
 | `MUSETALK_DIR` | `./MuseTalk` | MuseTalk checkout (bootstrap clones it) |
 | `DITTO_DIR` | `./ditto-talkinghead` | Ditto checkout (bootstrap clones it) |

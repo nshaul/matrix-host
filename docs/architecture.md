@@ -66,7 +66,7 @@ The dev transport is the same client with a `ws://` URL: `dev-server.mjs` pipes 
 Three contracts carry the whole system. Keep them small; everything else may churn.
 
 1. **`Generator`** (`gpu-server/server.py`): `start()`, `frame(t) -> ndarray`, `command(message: dict) -> dict`. One frame per call; implementations own their model and state. `CPUTestGenerator` proves the transport; real adapters (MuseTalk, Ditto) implement the same three methods. Selected via `GENERATOR=cpu|musetalk|ditto`.
-2. **`/offer`**: plain HTTP POST of `{sdp, type}`, answered with `{sdp, type}`. Standard WebRTC offer/answer, CORS-open, no auth layer yet (the box is ephemeral and the URL unlisted; treat that as a known gap, not a feature).
+2. **`/offer`**: plain HTTP POST of `{sdp, type}` (plus `token` when the client URL carries a `#<secret>` fragment), answered with `{sdp, type}`. Standard WebRTC offer/answer, CORS-open. Auth: set `STREAM_TOKEN` on the box and use `https://pod/offer#<token>` in stream.html; the server answers 401 on a bad or missing token. Unset means open, which is fine only for an unlisted dev pod.
 3. **`{cmd: ...}` protocol**: JSON messages on the data channel (prod) or the WebSocket (dev). Today: `{"cmd":"speak","text":…}`. Replies are always `{ok: boolean, ...}` with error detail in the reply body. The browser side is `Connection.send(message)` in `src/stream.ts`, identical for both transports.
 
 Inside the browser tiers the equivalent seam is the host object itself: `window.matrixHost` and `window.footageHost` are the complete public API, and the demo panels are just buttons wired to them.

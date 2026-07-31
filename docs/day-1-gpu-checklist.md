@@ -36,7 +36,7 @@ Owner checklist. One action per step, in order. Total cost for the day: a few do
 
 ## Phase E: connect and talk
 
-17. On your laptop, open `/stream.html` (via `pnpm dev`), set the server field to `https://<pod-url>/offer`, click Connect. Any non-`ws://` URL makes the client negotiate WebRTC automatically.
+17. On your laptop, open `/stream.html` (via `pnpm dev`), set the server field to `https://<pod-url>/offer`, click Connect. Any non-`ws://` URL makes the client negotiate WebRTC automatically. If you set `STREAM_TOKEN` on the box (do this for any pod that stays up), use `https://<pod-url>/offer#<token>` instead.
     If the connect fails: confirm port 8788 is exposed (step 8) and the URL is the pod's public proxy URL, not the internal one.
 18. Type a line in the say box and Send. The `{cmd:"speak", text}` command rides the WebRTC data channel; the box answers with generated talking-head frames and TTS audio (box-side Kokoro).
 19. You now have the avatar talking in `stream.html`. For a show: add the page as an OBS Browser source like any other tier.

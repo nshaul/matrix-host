@@ -6,8 +6,22 @@ import { FootageHost, type FootageSegment } from './engine/FootageHost'
  * remap the segments, everything else carries over.
  */
 const SEGMENTS: FootageSegment[] = [
-  { name: 'idle', start: 13.2, end: 16.8, mouth: { x: 0.47, y: 0.555, r: 0.055 } },
-  { name: 'look', start: 22.6, end: 25.8, mouth: { x: 0.615, y: 0.487, r: 0.05 } },
+  { name: 'idle', start: 13.2, end: 16.8 },
+  {
+    // Her face drifts through the shot — anchors are keyframed tracks
+    // (measured on native-res frame extracts), lerped by playback time.
+    name: 'look',
+    start: 22.6,
+    end: 25.8,
+    mouthR: 0.055,
+    eyeR: 0.045,
+    track: [
+      { t: 22.8, mouth: [0.579, 0.467], eyeL: [0.525, 0.354], eyeR: [0.681, 0.352] },
+      { t: 23.6, mouth: [0.531, 0.433], eyeL: [0.444, 0.327], eyeR: [0.615, 0.324] },
+      { t: 24.4, mouth: [0.506, 0.415], eyeL: [0.4125, 0.319], eyeR: [0.59, 0.316] },
+      { t: 25.2, mouth: [0.479, 0.405], eyeL: [0.396, 0.295], eyeR: [0.567, 0.291] },
+    ],
+  },
   { name: 'profile', start: 18.2, end: 21.8 },
   { name: 'stand', start: 25.9, end: 27.8 },
   { name: 'reach', start: 28.0, end: 31.2 },
@@ -43,6 +57,19 @@ for (const name of host.segmentNames()) {
   button.onclick = () => host.playSegment(name)
   segmentRow.appendChild(button)
 }
+const presentButton = document.createElement('button')
+presentButton.textContent = '👁 present'
+presentButton.title = 'Hold eye contact (loops the look segment, blink clock on)'
+presentButton.onclick = () => host.holdSegment('look')
+segmentRow.appendChild(presentButton)
+const restButton = document.createElement('button')
+restButton.textContent = 'rest'
+restButton.onclick = () => host.release()
+segmentRow.appendChild(restButton)
+const blinkButton = document.createElement('button')
+blinkButton.textContent = '😉 blink'
+blinkButton.onclick = () => host.blinkNow()
+segmentRow.appendChild(blinkButton)
 
 const bgScene = $<HTMLButtonElement>('bg-scene')
 const bgTransparent = $<HTMLButtonElement>('bg-transparent')

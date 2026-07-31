@@ -14,17 +14,57 @@ import { GLYPHS, GLYPH_COUNT } from './glyphTexture'
  * seamless crossfades), glyph atlas, warp, key, grade — 60 fps on any GPU.
  */
 
+/** Facial anchors at one timestamp of the footage (video UV, y down). */
+export type AnchorKeyframe = {
+  t: number
+  mouth?: [number, number]
+  eyeL?: [number, number]
+  eyeR?: [number, number]
+}
+
 export type FootageSegment = {
   name: string
   start: number
   end: number
-  /** Mouth anchor in video UV (y down) while this segment faces camera; enables talk warp. */
-  mouth?: { x: number; y: number; r: number }
+  /**
+   * Keyframed facial anchors — the face drifts through a segment, so anchors
+   * are tracks, lerped by playback time. Warps only fire where anchors exist.
+   */
+  track?: AnchorKeyframe[]
+  mouthR?: number
+  eyeR?: number
 }
 
 export type FootageBackgroundMode = 'scene' | 'transparent'
 
 const CROSSFADE_SECONDS = 0.45
+
+/** Lerp a segment's facial-anchor track at a playback time. */
+function anchorsAt(
+  segment: FootageSegment,
+  time: number,
+): { mouth?: [number, number]; eyeL?: [number, number]; eyeR?: [number, number] } {
+  const track = segment.track
+  if (!track || track.length === 0) return {}
+  let before = track[0]
+  let after = track[track.length - 1]
+  for (const key of track) {
+    if (key.t <= time) before = key
+    if (key.t >= time) {
+      after = key
+      break
+    }
+  }
+  const span = after.t - before.t
+  const mix = span > 0 ? Math.min(1, Math.max(0, (time - before.t) / span)) : 0
+  const lerpPair = (a?: [number, number], b?: [number, number]): [number, number] | undefined =>
+    a && b ? [a[0] + (b[0] - a[0]) * mix, a[1] + (b[1] - a[1]) * mix] : (a ?? b)
+  return {
+    mouth: lerpPair(before.mouth, after.mouth),
+    eyeL: lerpPair(before.eyeL, after.eyeL),
+    eyeR: lerpPair(before.eyeR, after.eyeR),
+  }
+}
 
 const VERTEX = `
 attribute vec2 aPosition;
@@ -44,8 +84,13 @@ uniform sampler2D uGlyphs;
 uniform float uFade;        // 0 = A, 1 = B
 uniform float uTime;
 uniform float uJaw;         // 0..1 mouth-open from live audio
+uniform float uBlink;       // 0..1 eyelids closed
 uniform vec3 uMouthA;       // xy = uv center, z = radius (0 disables)
 uniform vec3 uMouthB;
+uniform vec3 uEyeLA;        // per-slot eye anchors, z = radius (0 disables)
+uniform vec3 uEyeRA;
+uniform vec3 uEyeLB;
+uniform vec3 uEyeRB;
 uniform float uTransparent; // 1 = luma-key alpha out
 uniform vec4 uContentBox;   // x,y = offset, z,w = scale of contain-fit
 uniform float uGlyphCount;
@@ -65,6 +110,18 @@ vec2 mouthWarp(vec2 uv, vec3 mouth, float jaw) {
   return uv;
 }
 
+// Blink warp: inside the eye ellipse, pixels collapse toward the upper-lid
+// line, so the lid skin sweeps down over the iris.
+vec2 blinkWarp(vec2 uv, vec3 eye, float blink) {
+  if (eye.z <= 0.0 || blink <= 0.001) return uv;
+  vec2 d = (uv - eye.xy) / eye.z;
+  d.y *= 1.4;
+  float falloff = smoothstep(1.0, 0.2, length(d));
+  float lidLine = eye.y - eye.z * 0.42;
+  uv.y = mix(uv.y, lidLine, blink * falloff * 0.85);
+  return uv;
+}
+
 vec2 toVideoUv(vec2 uv) {
   return (uv - uContentBox.xy) / uContentBox.zw;
 }
@@ -74,8 +131,10 @@ void main() {
   float inFrame = step(0.0, uv.x) * step(uv.x, 1.0) * step(0.0, uv.y) * step(uv.y, 1.0);
   vec2 uvClamped = clamp(uv, 0.0, 1.0);
 
-  vec3 vidA = texture2D(uVideoA, mouthWarp(uvClamped, uMouthA, uJaw)).rgb;
-  vec3 vidB = texture2D(uVideoB, mouthWarp(uvClamped, uMouthB, uJaw)).rgb;
+  vec2 uvA = blinkWarp(blinkWarp(mouthWarp(uvClamped, uMouthA, uJaw), uEyeLA, uBlink), uEyeRA, uBlink);
+  vec2 uvB = blinkWarp(blinkWarp(mouthWarp(uvClamped, uMouthB, uJaw), uEyeLB, uBlink), uEyeRB, uBlink);
+  vec3 vidA = texture2D(uVideoA, uvA).rgb;
+  vec3 vidB = texture2D(uVideoB, uvB).rgb;
   vec3 video = mix(vidA, vidB, uFade) * inFrame;
   float luma = dot(video, vec3(0.299, 0.587, 0.114));
 
@@ -161,6 +220,10 @@ export class FootageHost {
   private disposed = false
   private lastNow = 0
   private jaw = 0
+  private blink = 0
+  private nextBlinkAt = 2.5
+  private blinkStartedAt = -1
+  private homeName: string
   private speakingAudio: HTMLAudioElement | null = null
   private speakingUrl: string | null = null
   private statusHandler: (message: string) => void = () => {}
@@ -175,6 +238,7 @@ export class FootageHost {
     const idle = this.segments.get(idleName)
     if (!idle) throw new Error(`idle segment "${idleName}" missing`)
     this.idleName = idleName
+    this.homeName = idleName
     this.currentSegment = idle
 
     this.canvas = document.createElement('canvas')
@@ -207,8 +271,13 @@ export class FootageHost {
       'uFade',
       'uTime',
       'uJaw',
+      'uBlink',
       'uMouthA',
       'uMouthB',
+      'uEyeLA',
+      'uEyeRA',
+      'uEyeLB',
+      'uEyeRB',
       'uTransparent',
       'uContentBox',
       'uGlyphCount',
@@ -249,11 +318,30 @@ export class FootageHost {
     this.statusHandler(`footage live — segment "${this.currentSegment.name}"`)
   }
 
-  /** Command a gesture segment; it plays once, then crossfades home to idle. */
+  /** Command a gesture segment; it plays once, then crossfades home. */
   playSegment(name: string): void {
     const segment = this.segments.get(name)
     if (!segment || segment.name === this.currentSegment.name) return
     this.queuedSegment = segment
+  }
+
+  /** Make a segment the looping home (eye contact while presenting/speaking). */
+  holdSegment(name: string): void {
+    if (this.segments.has(name)) {
+      this.homeName = name
+      this.playSegment(name)
+    }
+  }
+
+  /** Return home to the resting idle loop. */
+  release(): void {
+    this.homeName = this.idleName
+    this.playSegment(this.idleName)
+  }
+
+  /** Blink now (a natural clock also blinks on its own during eyes-open segments). */
+  blinkNow(): void {
+    this.blinkStartedAt = this.lastNow / 1000
   }
 
   segmentNames(): string[] {
@@ -266,6 +354,7 @@ export class FootageHost {
 
   async speak(source: string | Blob | MediaStream): Promise<void> {
     this.stopSpeaking()
+    this.holdSegment('look') // eye contact while talking
     if (source instanceof MediaStream) {
       this.lipSync.attachStream(source)
       this.statusHandler('lip-sync: live stream')
@@ -278,13 +367,19 @@ export class FootageHost {
     audio.src = url
     this.speakingAudio = audio
     this.lipSync.attachElement(audio)
+    audio.onended = () => {
+      this.release()
+      this.statusHandler('speech finished')
+    }
     await audio.play()
     this.statusHandler('speaking…')
   }
 
   speakDemo(): void {
     this.stopSpeaking()
+    this.holdSegment('look')
     this.lipSync.speakDemo()
+    setTimeout(() => this.release(), 3600)
     this.statusHandler('demo speech')
   }
 
@@ -397,8 +492,9 @@ export class FootageHost {
       this.beginCrossfade(this.queuedSegment)
       this.queuedSegment = null
     } else if (this.fadeTarget === 0 && activeVideo.currentTime >= this.currentSegment.end - CROSSFADE_SECONDS) {
-      // Segment running out: crossfade home — idle loops onto itself this way too.
-      const home = this.segments.get(this.idleName)
+      // Segment running out: crossfade home — the home loop (idle, or a held
+      // segment like "look" while speaking) loops onto itself this way too.
+      const home = this.segments.get(this.homeName)
       if (home) this.beginCrossfade(home)
     }
 
@@ -419,6 +515,27 @@ export class FootageHost {
     const weights = this.lipSync.update(dt)
     this.jaw += ((weights.aa + weights.oh * 0.7 + weights.ou * 0.5) * 1.4 - this.jaw) * (1 - Math.exp(-dt / 0.06))
 
+    // ----- blink clock: only while an eyes-open segment is on screen -----
+    const seconds = now / 1000
+    const hasEyes = this.currentSegment.track?.some((key) => key.eyeL || key.eyeR) ?? false
+    if (hasEyes) {
+      if (this.blinkStartedAt < 0 && seconds >= this.nextBlinkAt) this.blinkStartedAt = seconds
+      if (this.blinkStartedAt >= 0) {
+        const progress = (seconds - this.blinkStartedAt) / 0.16
+        if (progress >= 1) {
+          this.blink = 0
+          this.blinkStartedAt = -1
+          this.nextBlinkAt = seconds + 2.2 + Math.random() * 3.2
+        } else {
+          this.blink = Math.sin(progress * Math.PI)
+        }
+      }
+    } else {
+      this.blink = 0
+      this.blinkStartedAt = -1
+      this.nextBlinkAt = seconds + 1.5
+    }
+
     // ----- draw -----
     this.uploadVideoFrame(0)
     this.uploadVideoFrame(1)
@@ -431,14 +548,19 @@ export class FootageHost {
     set1f('uTransparent', this.backgroundMode === 'transparent' ? 1 : 0)
     set1f('uCanvasHeight', this.canvas.height)
 
-    const mouthOf = (slot: number) => {
-      const segment = slot === this.active ? this.currentSegment : (this.queuedTarget ?? this.currentSegment)
-      return segment.mouth ?? { x: 0, y: 0, r: 0 }
+    set1f('uBlink', this.blink)
+    const segmentOf = (slot: number) =>
+      slot === this.active ? this.currentSegment : (this.queuedTarget ?? this.currentSegment)
+    const set3 = (name: string, x: number, y: number, z: number) =>
+      gl.uniform3f(this.uniforms.get(name) ?? null, x, y, z)
+    for (const slot of [0, 1] as const) {
+      const segment = segmentOf(slot)
+      const anchors = anchorsAt(segment, this.videos[slot].currentTime)
+      const suffix = slot === 0 ? 'A' : 'B'
+      set3(`uMouth${suffix}`, anchors.mouth?.[0] ?? 0, anchors.mouth?.[1] ?? 0, anchors.mouth ? (segment.mouthR ?? 0.05) : 0)
+      set3(`uEyeL${suffix}`, anchors.eyeL?.[0] ?? 0, anchors.eyeL?.[1] ?? 0, anchors.eyeL ? (segment.eyeR ?? 0.04) : 0)
+      set3(`uEyeR${suffix}`, anchors.eyeR?.[0] ?? 0, anchors.eyeR?.[1] ?? 0, anchors.eyeR ? (segment.eyeR ?? 0.04) : 0)
     }
-    const mouthA = mouthOf(0)
-    const mouthB = mouthOf(1)
-    gl.uniform3f(this.uniforms.get('uMouthA') ?? null, mouthA.x, mouthA.y, mouthA.r)
-    gl.uniform3f(this.uniforms.get('uMouthB') ?? null, mouthB.x, mouthB.y, mouthB.r)
 
     // Contain-fit the video into the canvas.
     const video = this.videos[this.active]

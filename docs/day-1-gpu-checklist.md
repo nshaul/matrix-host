@@ -22,23 +22,23 @@ Owner checklist. One action per step, in order. Total cost for the day: a few do
 ## Phase C: set up the server on the box
 
 10. Clone this repo onto the pod and `cd` into `gpu-server/`.
-11. Run the one-command bootstrap: `bash bootstrap.sh`. <!-- verify-at-integration: bootstrap.sh is being built this wave -->
+11. Run the one-command bootstrap: `bash bootstrap.sh`.
     If bootstrap is not present on your checkout, the manual path is `pip install -r requirements.txt` plus copying `public/footage/reference.mp4` next to `server.py` for the CPU test generator.
-12. License audit: read the bootstrap output. It prints every external repo and weight file it pulls. <!-- verify-at-integration --> Confirm the list contains only Apache-2.0/MIT entries (Ditto, MuseTalk, Kokoro). If LivePortrait or InsightFace appears, stop; those are excluded for commercial use.
-13. Pick the generator: `export GENERATOR=cpu` for the first smoke run, later `musetalk` or `ditto`. <!-- verify-at-integration: GENERATOR switch is being built this wave -->
+12. License audit: read the bootstrap output. It prints every external repo and weight file it pulls. Confirm the list contains only Apache-2.0/MIT entries (Ditto, MuseTalk, Kokoro). If LivePortrait or InsightFace appears, stop; those are excluded for commercial use.
+13. Pick the generator: `export GENERATOR=cpu` for the first smoke run, later `musetalk` or `ditto`.
 
 ## Phase D: gate before you stream
 
-14. Run `python server.py --selftest`. <!-- verify-at-integration: --selftest is being built this wave --> It must exit clean.
+14. Run `python server.py --selftest`.It must exit clean.
     If it fails: the output names the failing stage (model load, weight file, CUDA). Fix that stage; do not proceed on a red selftest.
 15. Start the server: `python server.py` (listens on `0.0.0.0:8788`, WebRTC offers at `POST /offer`).
-16. Probe health from your laptop: `curl https://<pod-url>/health`. <!-- verify-at-integration: /health is being built this wave -->
+16. Probe health from your laptop: `curl https://<pod-url>/health`.
 
 ## Phase E: connect and talk
 
 17. On your laptop, open `/stream.html` (via `pnpm dev`), set the server field to `https://<pod-url>/offer`, click Connect. Any non-`ws://` URL makes the client negotiate WebRTC automatically.
     If the connect fails: confirm port 8788 is exposed (step 8) and the URL is the pod's public proxy URL, not the internal one.
-18. Type a line in the say box and Send. The `{cmd:"speak", text}` command rides the WebRTC data channel; the box answers with generated talking-head frames and TTS audio (box-side Kokoro). <!-- verify-at-integration: audio track is being built this wave -->
+18. Type a line in the say box and Send. The `{cmd:"speak", text}` command rides the WebRTC data channel; the box answers with generated talking-head frames and TTS audio (box-side Kokoro).
 19. You now have the avatar talking in `stream.html`. For a show: add the page as an OBS Browser source like any other tier.
 
 ## Shutting down

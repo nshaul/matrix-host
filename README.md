@@ -46,8 +46,8 @@ await matrixHost.speak('https://…/tts.mp3')            // URL, Blob/File, or M
 matrixHost.setVisemes({ aa: 0.6 })                     // external mouth drive; null returns control to the analyser
 matrixHost.speakDemo()                                 // procedural voice, no audio file needed
 const webm = await matrixHost.record(8)                // canvas capture to webm Blob
-matrixHost.pointAt(x, y)                               // articulated point at screen coords <!-- verify-at-integration -->
-matrixHost.setFraming('closeup')                       // camera framing presets <!-- verify-at-integration -->
+matrixHost.pointAt(x, y)                               // articulated point at screen coords
+matrixHost.setFraming('closeup')                       // camera framing presets
 ```
 
 Ships with a roster in `public/avatars/` (Alicia, Victoria, school girl, guy, girl, boy). Drop any `.vrm` on the page, or make your own free in [VRoid Studio](https://vroid.com/en/studio). A `.glb` gets the same hologram treatment with no rig (logo mode).
@@ -56,7 +56,7 @@ The footage tier has its own surface, `window.footageHost`: `playSegment(name)`,
 
 ## Voice
 
-<!-- verify-at-integration: src/voice.ts and window.hostVoice are being built this wave; API below is the target surface -->
+
 
 Three engines, one `window.hostVoice` surface, all free to start:
 
@@ -99,7 +99,7 @@ node gpu-server/dev-server.mjs   # ffmpeg to MJPEG over ws://localhost:8789
 pnpm dev                         # open /stream.html, Connect
 ```
 
-The generator seam swaps a CPU test loop for a real talking-head model (`GENERATOR=cpu|musetalk|ditto` <!-- verify-at-integration -->). Full technical runbook: [`gpu-server/README-gpu.md`](gpu-server/README-gpu.md). Owner path from zero to a talking avatar: [`docs/day-1-gpu-checklist.md`](docs/day-1-gpu-checklist.md). How it compares to HeyGen: [`docs/heygen-parity.md`](docs/heygen-parity.md). System design: [`docs/architecture.md`](docs/architecture.md).
+The generator seam swaps a CPU test loop for a real talking-head model (`GENERATOR=cpu|musetalk|ditto`). Full technical runbook: [`gpu-server/README-gpu.md`](gpu-server/README-gpu.md). Owner path from zero to a talking avatar: [`docs/day-1-gpu-checklist.md`](docs/day-1-gpu-checklist.md). How it compares to HeyGen: [`docs/heygen-parity.md`](docs/heygen-parity.md). System design: [`docs/architecture.md`](docs/architecture.md).
 
 ## Licenses (free tools only, end to end)
 

@@ -82,6 +82,11 @@ $<HTMLButtonElement>('wave').onclick = () => host.wave()
 $<HTMLButtonElement>('point').onclick = () => host.point()
 $<HTMLButtonElement>('scold').onclick = () => host.scold()
 $<HTMLButtonElement>('yell').onclick = () => host.yell()
+$<HTMLButtonElement>('thumbsup').onclick = () => host.thumbsUp()
+$<HTMLButtonElement>('point-corner').onclick = () => host.pointAt(0.9, 0.12, { durationSeconds: 3.5 })
+$<HTMLSelectElement>('framing').onchange = (event) => {
+  host.setFraming((event.target as HTMLSelectElement).value as 'closeup' | 'bust' | 'waist' | 'full')
+}
 $<HTMLSelectElement>('emotion').onchange = (event) => {
   host.setEmotion((event.target as HTMLSelectElement).value as 'neutral' | 'happy' | 'angry' | 'sad' | 'relaxed')
 }

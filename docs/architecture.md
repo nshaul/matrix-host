@@ -44,7 +44,7 @@ Two override paths on the same rail:
 - `setVisemes(weights | null)` bypasses the analyser. This exists because system-voice TTS (`speechSynthesis`) produces no analysable audio stream; its driver feeds mouth weights directly. `null` returns control to the analyser.
 - Gestures can demand the mouth too (yell); the loudest source wins per frame.
 
-The voice system (`src/voice.ts`, `window.hostVoice`) sits in front of this rail: system voice drives `setVisemes`, Kokoro and ElevenLabs produce audio that goes through `speak()`. <!-- verify-at-integration: voice.ts lands this wave -->
+The voice system (`src/voice.ts`, `window.hostVoice`) sits in front of this rail: system voice drives `setVisemes`, Kokoro and ElevenLabs produce audio that goes through `speak()`.
 
 ## Data flow: GPU stream
 
@@ -53,7 +53,7 @@ browser (stream.html)                         GPU box (server.py)
   POST /offer {sdp, type}  ───────────────▶   aiohttp: RTCPeerConnection per client
   ◀───────────────  answer {sdp, type}
   ◀═══ video track: GeneratedTrack paced at FPS=24, one Generator.frame(t) per frame
-  ◀═══ audio track: box-side Kokoro TTS      <!-- verify-at-integration: audio track lands this wave -->
+  ◀═══ audio track: box-side Kokoro TTS     
   data channel "commands":
   {"cmd":"speak","text":…}  ──────────────▶   Generator.command(message)
   ◀──────────────  {"ok":true|false, …}       (errors surfaced in the reply, never swallowed)
@@ -65,7 +65,7 @@ The dev transport is the same client with a `ws://` URL: `dev-server.mjs` pipes 
 
 Three contracts carry the whole system. Keep them small; everything else may churn.
 
-1. **`Generator`** (`gpu-server/server.py`): `start()`, `frame(t) -> ndarray`, `command(message: dict) -> dict`. One frame per call; implementations own their model and state. `CPUTestGenerator` proves the transport; real adapters (MuseTalk, Ditto) implement the same three methods. Selected via `GENERATOR=cpu|musetalk|ditto`. <!-- verify-at-integration: env switch lands this wave -->
+1. **`Generator`** (`gpu-server/server.py`): `start()`, `frame(t) -> ndarray`, `command(message: dict) -> dict`. One frame per call; implementations own their model and state. `CPUTestGenerator` proves the transport; real adapters (MuseTalk, Ditto) implement the same three methods. Selected via `GENERATOR=cpu|musetalk|ditto`.
 2. **`/offer`**: plain HTTP POST of `{sdp, type}`, answered with `{sdp, type}`. Standard WebRTC offer/answer, CORS-open, no auth layer yet (the box is ephemeral and the URL unlisted; treat that as a known gap, not a feature).
 3. **`{cmd: ...}` protocol**: JSON messages on the data channel (prod) or the WebSocket (dev). Today: `{"cmd":"speak","text":…}`. Replies are always `{ok: boolean, ...}` with error detail in the reply body. The browser side is `Connection.send(message)` in `src/stream.ts`, identical for both transports.
 

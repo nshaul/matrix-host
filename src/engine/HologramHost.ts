@@ -9,10 +9,12 @@ import { VRMLoaderPlugin, VRMUtils, type VRM } from '@pixiv/three-vrm'
 import { createGlyphAtlas } from './glyphTexture'
 import { applyHologramToAvatar, type HologramMaterialHandle } from './hologramMaterial'
 import { createAmbientGlow, createRainLayer, createSkyline, type RainLayer } from './rain'
-import { GestureController } from './gestures'
+import { GestureController, type PointStyle } from './gestures'
+import type { HandShapeName, HandSide } from './hands'
 import { LipSync } from './lipsync'
 
 export type BackgroundMode = 'matrix' | 'transparent'
+export type FramingName = 'closeup' | 'bust' | 'waist' | 'full'
 
 /** Film-print pass: fine grain + vignette. Runs after bloom, before output. */
 const FilmGradeShader = {
@@ -75,6 +77,15 @@ export class HologramHost {
   private orbitYaw = 0
   private orbitPitch = 0
   private zoom = 1.9
+  private focusY = 1.32
+  /** Measured per subject at load: head/hips world height (framing adapts to proportions). */
+  private subjectHeights = { head: 1.42, hips: 0.92 }
+  private framingAnim: { t: number; dur: number; fromZoom: number; toZoom: number; fromFocusY: number; toFocusY: number } | null =
+    null
+  /** Last requested screen-point (normalized 0..1) — re-solved every frame as the camera drifts. */
+  private pointScreen: { x: number; y: number } | null = null
+  private readonly lookTargetObj = new THREE.Object3D()
+  private readonly aimWork = new THREE.Vector3()
   private animationFrame = 0
   private disposed = false
   private speakingAudio: HTMLAudioElement | null = null
@@ -97,6 +108,7 @@ export class HologramHost {
     container.appendChild(this.canvas)
 
     this.camera = new THREE.PerspectiveCamera(33, 1, 0.1, 60)
+    this.scene.add(this.lookTargetObj)
 
     this.environment.add(createSkyline())
     this.environment.add(createAmbientGlow())
@@ -168,6 +180,22 @@ export class HologramHost {
 
     this.materialHandles = applyHologramToAvatar(this.subjectRoot, this.glyphAtlas)
     this.scene.add(this.subjectRoot)
+    this.pointScreen = null
+
+    if (vrm) {
+      // Measure the subject so camera framings adapt to its proportions.
+      this.subjectRoot.updateWorldMatrix(true, true)
+      const head = vrm.humanoid.getNormalizedBoneNode('head')
+      const hips = vrm.humanoid.getNormalizedBoneNode('hips')
+      const probe = new THREE.Vector3()
+      if (head) this.subjectHeights.head = head.getWorldPosition(probe).y
+      if (hips) this.subjectHeights.hips = hips.getWorldPosition(probe).y
+      // Eyes track the camera by default (eye contact), or the point target while pointing.
+      if (vrm.lookAt) {
+        this.lookTargetObj.position.copy(this.camera.position)
+        vrm.lookAt.target = this.lookTargetObj
+      }
+    }
     this.statusHandler(vrm ? 'subject ready — rigged, visemes live' : 'subject ready — static mesh (no rig)')
   }
 
@@ -191,18 +219,80 @@ export class HologramHost {
     this.gestures?.wave()
   }
 
+  /** Arm out, fist closed, index finger aimed straight into the lens. */
   point(): void {
-    this.gestures?.point()
+    this.pointAt(0.5, 0.5)
   }
 
-  /** Point + finger wag + stern face at the lens. */
+  /**
+   * Point the extended index finger at a screen position. (0,0) is the
+   * viewer's top-left, (1,1) bottom-right, (0.5,0.5) straight into the lens.
+   * Head and eyes follow the same target; the pointing hand forms a fist with
+   * only the index extended. Arm choice is automatic (same-side arm, no
+   * cross-body reach) unless forced via opts.hand.
+   */
+  pointAt(
+    x: number,
+    y: number,
+    opts: { hand?: HandSide | 'auto'; style?: PointStyle; durationSeconds?: number } = {},
+  ): void {
+    if (!this.gestures) return
+    const sx = Math.min(1, Math.max(0, x))
+    const sy = Math.min(1, Math.max(0, y))
+    const hand: HandSide = opts.hand && opts.hand !== 'auto' ? opts.hand : sx > 0.55 ? 'left' : 'right'
+    this.pointScreen = { x: sx, y: sy }
+    this.updateAimTarget()
+    this.gestures.pointToward({ hand, style: opts.style ?? 'calm', durationSeconds: opts.durationSeconds })
+  }
+
+  /** Fist + index wag at the lens, stern face — the "no-no-no" at the camera. */
   scold(): void {
-    this.gestures?.scold()
+    if (!this.gestures) return
+    this.pointScreen = { x: 0.5, y: 0.5 }
+    this.updateAimTarget()
+    this.gestures.scold()
   }
 
-  /** Lean in, angry, mouth working, pointing — yelling into the camera. */
+  /** Lean in, angry, mouth working, index finger jabbing into the camera. */
   yell(): void {
-    this.gestures?.yell()
+    if (!this.gestures) return
+    this.pointScreen = { x: 0.5, y: 0.5 }
+    this.updateAimTarget()
+    this.gestures.yell()
+  }
+
+  /** Raise a fist with the thumb up at the lens. */
+  thumbsUp(): void {
+    this.gestures?.thumbsUp()
+  }
+
+  /** Hold a hand shape outside gestures ('open' | 'relaxed' | 'fist' | 'indexPoint' | 'thumbsUp'). */
+  setHandShape(side: HandSide, shape: HandShapeName): void {
+    this.gestures?.setBaseHandShape(side, shape)
+  }
+
+  /**
+   * Smooth (~1s eased) camera re-frame: 'closeup' = head+shoulders (a fist at
+   * the lens fills the frame), 'bust', 'waist', 'full'. Composes with orbit
+   * drag, wheel zoom, and the cinematic drift.
+   */
+  setFraming(name: FramingName): void {
+    const { head, hips } = this.subjectHeights
+    const presets: Record<FramingName, { focusY: number; dist: number }> = {
+      closeup: { focusY: head + 0.02, dist: 0.8 },
+      bust: { focusY: head - 0.16, dist: 1.25 },
+      waist: { focusY: (head + hips) / 2 + 0.08, dist: 1.95 },
+      full: { focusY: head * 0.54, dist: head * 2.15 },
+    }
+    const target = presets[name]
+    this.framingAnim = {
+      t: 0,
+      dur: 1.05,
+      fromZoom: this.zoom,
+      toZoom: target.dist,
+      fromFocusY: this.focusY,
+      toFocusY: target.focusY,
+    }
   }
 
   setEmotion(name: 'angry' | 'happy' | 'sad' | 'relaxed' | 'neutral', weight = 1): void {
@@ -300,10 +390,45 @@ export class HologramHost {
       'wheel',
       (event) => {
         event.preventDefault()
-        this.zoom = Math.min(5, Math.max(1.2, this.zoom + event.deltaY * 0.002))
+        this.framingAnim = null // user zoom wins over an in-flight re-frame
+        this.zoom = Math.min(5, Math.max(0.55, this.zoom + event.deltaY * 0.002))
       },
       { passive: false },
     )
+  }
+
+  /** A world point `reach` metres down the camera ray through screen (x,y). */
+  private screenRayPoint(x: number, y: number, reach: number, out: THREE.Vector3): THREE.Vector3 {
+    const ndc = out.set(x * 2 - 1, -(y * 2 - 1), 0.5)
+    ndc.unproject(this.camera)
+    const dir = ndc.sub(this.camera.position).normalize()
+    return dir.multiplyScalar(reach).add(this.camera.position)
+  }
+
+  /**
+   * Convert the requested screen point into world aim targets. Eyes and head
+   * aim at the EXACT point; the arm aims at a composition-offset point shifted
+   * toward the pointing hand's own screen side and slightly low — the way an
+   * actor points into a lens — so the fist never parks in front of the face
+   * and the additive shells don't stack into a white ball. The offset fades to
+   * zero away from frame center, keeping corner points exact.
+   */
+  private updateAimTarget(): void {
+    if (!this.pointScreen || !this.gestures) return
+    this.camera.updateMatrixWorld()
+    // Gaze reach stays SHORT of the subject (between camera and body): a longer
+    // ray lands behind her and she turns away from the lens while pointing at it.
+    const camDist = this.camera.position.distanceTo(this.aimWork.set(0, this.focusY, 0))
+    const look = this.screenRayPoint(this.pointScreen.x, this.pointScreen.y, Math.max(0.35, camDist * 0.45), new THREE.Vector3())
+
+    const hand = this.gestures.pointingHand
+    const centered = 1 - Math.min(1, Math.hypot(this.pointScreen.x - 0.5, this.pointScreen.y - 0.5) * 2.2)
+    const ax = Math.min(1, Math.max(0, this.pointScreen.x + (hand === 'right' ? -0.13 : 0.13) * centered))
+    const ay = Math.min(1, Math.max(0, this.pointScreen.y + 0.17 * centered))
+    const armReach = Math.max(0.3, camDist * 0.3)
+    const arm = this.screenRayPoint(ax, ay, armReach, new THREE.Vector3())
+
+    this.gestures.setAimTargets(arm, look)
   }
 
   private resize(): void {
@@ -324,12 +449,22 @@ export class HologramHost {
     const dt = Math.min(this.clock.getDelta(), 0.05)
     const elapsed = this.clock.elapsedTime
 
+    // Smooth eased re-framing (closeup/bust/waist/full) — cancelled by user wheel.
+    if (this.framingAnim) {
+      const anim = this.framingAnim
+      anim.t = Math.min(1, anim.t + dt / anim.dur)
+      const s = anim.t * anim.t * (3 - 2 * anim.t)
+      this.zoom = anim.fromZoom + (anim.toZoom - anim.fromZoom) * s
+      this.focusY = anim.fromFocusY + (anim.toFocusY - anim.fromFocusY) * s
+      if (anim.t >= 1) this.framingAnim = null
+    }
+
     // Slow cinematic dolly drift on top of user orbit.
     const driftYaw = Math.sin(elapsed * 0.1) * 0.045
     const driftZoom = 1 + Math.sin(elapsed * 0.067) * 0.02
     const yaw = this.orbitYaw + driftYaw
     const zoom = this.zoom * driftZoom
-    const focus = new THREE.Vector3(0, 1.32, 0)
+    const focus = new THREE.Vector3(0, this.focusY, 0)
     this.camera.position.set(
       focus.x + Math.sin(yaw) * Math.cos(this.orbitPitch) * zoom,
       focus.y + Math.sin(this.orbitPitch) * zoom * 0.6 + 0.06,
@@ -337,7 +472,16 @@ export class HologramHost {
     )
     this.camera.lookAt(focus)
 
+    // Re-solve the point target every frame — the camera drifts, the finger must not.
+    this.updateAimTarget()
+
     this.gestures?.update(dt)
+
+    // Eyes: point target while pointing, else eye contact with the lens.
+    if (this.gestures) {
+      const desired = this.gestures.lookTargetActive ? this.gestures.lookTargetWorld : this.camera.position
+      this.lookTargetObj.position.lerp(desired, 1 - Math.exp(-dt / 0.12))
+    }
 
     const weights = this.externalVisemes ?? this.lipSync.update(dt)
     if (this.externalVisemes) this.lipSync.update(dt) // keep analyser smoothing warm

@@ -22,8 +22,19 @@
       #panel button { font: inherit; color: #d7ffe6; background: #0a2415; border: 1px solid #1e5c36; border-radius: 6px; padding: 5px 8px; cursor: pointer; }
       #panel button:hover { background: #123a22; }
       #panel .row { display: flex; gap: 6px; }
+      #panel .row[hidden] { display: none; }
+      #panel label { align-self: center; }
+      #panel input[type="range"] { flex: 1; accent-color: #6fe89b; }
       #panel .hint { color: #5a8a6c; font-size: 11px; }
       #panel a { color: #6fe89b; }
+      #soundGate {
+        position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%); z-index: 20;
+        font: 13px/1.4 ui-monospace, Consolas, monospace; color: #d7ffe6;
+        background: #04140ae6; border: 1px solid #2e8a52; border-radius: 999px;
+        padding: 10px 18px; cursor: pointer; backdrop-filter: blur(6px);
+      }
+      #soundGate:hover { background: #123a22; }
+      #soundGate[hidden] { display: none; }
     </style>
   </head>
   <body>
@@ -32,7 +43,7 @@
       <h1>GPU Stream</h1>
       <span class="hint">Real generated frames from the render server. <a href="./footage.html">footage →</a></span>
       <div class="row">
-        <input id="server" type="text" value="ws://localhost:8789" title="ws:// dev streamer or http(s)://…/offer for WebRTC" />
+        <input id="server" type="text" value="ws://localhost:8789" title="ws:// dev streamer (video only) or http(s)://…/offer for WebRTC (video + voice)" />
       </div>
       <div class="row">
         <button id="connect">Connect</button>
@@ -42,9 +53,14 @@
         <input id="say" type="text" placeholder="command: say something…" />
         <button id="send">Send</button>
       </div>
+      <div class="row" id="volumeRow" hidden>
+        <label class="hint" for="volume">vol</label>
+        <input id="volume" type="range" min="0" max="100" value="80" />
+      </div>
       <span class="hint" id="status">not connected</span>
       <span class="hint" id="stats"></span>
     </div>
+    <button id="soundGate" hidden>🔊 click to enable sound</button>
     <script type="module" src="/src/stream.ts"></script>
   </body>
 </html>

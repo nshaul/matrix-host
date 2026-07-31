@@ -44,6 +44,7 @@ uniform float uGlyphCount;
 uniform float uBoost;
 uniform float uHasMap;
 uniform float uLumaGain;
+uniform float uLumaCap;
 varying vec2 vUv;
 varying vec3 vNormalW;
 varying vec3 vViewDirW;
@@ -59,22 +60,22 @@ void main() {
   // Compress hard: anime textures live near white — the body must sit in the
   // matrix-green band with white reserved for rim, glyph sparks, and bloom.
   // uLumaGain lifts dark surfaces (hair) that would otherwise vanish additively.
-  luma = min(pow(luma * uLumaGain, 2.2) * 0.82, 0.9);
+  luma = min(pow(luma * uLumaGain, 2.2) * 0.82, uLumaCap);
 
   // Sculpting light: flat toon textures carry no form, so a shader key light
   // provides the volume the reference reads as depth.
   vec3 N = normalize(vNormalW);
   vec3 V = normalize(vViewDirW);
   vec3 keyDir = normalize(vec3(0.35, 0.55, 0.75));
-  float shade = 0.35 + 0.65 * max(dot(N, keyDir), 0.0);
+  float shade = 0.22 + 0.78 * max(dot(N, keyDir), 0.0);
   luma *= shade;
 
   vec3 color = mix(vec3(0.004, 0.04, 0.016), vec3(0.05, 0.32, 0.14), smoothstep(0.0, 0.5, luma));
   color = mix(color, vec3(0.16, 0.62, 0.32), smoothstep(0.45, 0.95, luma));
 
-  // Fresnel rim — the reference's hot silhouette contour.
-  float fres = pow(1.0 - max(dot(N, V), 0.0), 3.0);
-  color += vec3(0.75, 1.0, 0.85) * fres * 0.9;
+  // Fresnel rim — the reference's hot silhouette contour, thin and precise.
+  float fres = pow(1.0 - max(dot(N, V), 0.0), 3.4);
+  color += vec3(0.75, 1.0, 0.85) * fres * 0.6;
 
   // Glyph code flowing down the figure (screen-space columns).
   vec2 cellCoord = gl_FragCoord.xy / uCellPx;
@@ -96,8 +97,8 @@ void main() {
   vec2 vp = vUv * 14.0;
   float n1 = sin(vp.x * 3.1 + sin(vp.y * 2.7 + uTime * 0.7));
   float n2 = sin(vp.y * 4.3 + sin(vp.x * 3.7 - uTime * 0.5) + uTime * 0.23);
-  float vein = smoothstep(0.975, 1.0, 1.0 - abs(n1 * n2));
-  color += vec3(0.8, 1.0, 0.9) * vein * smoothstep(0.08, 0.35, luma) * 0.45;
+  float vein = smoothstep(0.978, 1.0, 1.0 - abs(n1 * n2));
+  color += vec3(0.8, 1.0, 0.9) * vein * smoothstep(0.08, 0.35, luma) * 0.3;
 
   // Slow luminous breathing.
   color *= 0.94 + 0.06 * sin(uTime * 1.4);
@@ -122,6 +123,8 @@ export function createHologramMaterial(
   glyphAtlas: THREE.Texture,
   side: THREE.Side = THREE.FrontSide,
   lumaGain = 1,
+  lumaCap = 0.9,
+  depthWrite = false,
 ): HologramMaterialHandle {
   const material = new THREE.ShaderMaterial({
     vertexShader: VERTEX,
@@ -135,10 +138,14 @@ export function createHologramMaterial(
       uBoost: { value: 1 },
       uHasMap: { value: sourceMap ? 1 : 0 },
       uLumaGain: { value: lumaGain },
+      uLumaCap: { value: lumaCap },
     },
     transparent: true,
     blending: THREE.AdditiveBlending,
-    depthWrite: false,
+    // Hair writes depth: voluminous strand shells occlude each other instead of
+    // additively stacking into a white mass. Skin/cloth stay depth-silent for
+    // the translucent hologram interior.
+    depthWrite,
     // Preserve the source sidedness: VRoid hair/face shells are authored
     // double-sided and vanish under a forced FrontSide.
     side,
@@ -174,9 +181,12 @@ export function applyHologramToAvatar(root: THREE.Object3D, glyphAtlas: THREE.Te
     const replaced = materials.map((original) => {
       if ((original as { isOutline?: boolean }).isOutline) return nullMaterial
       const map = (original as THREE.MeshStandardMaterial).map ?? null
-      // Dark hair would vanish additively — lift it; blazing eye whites — damp them.
-      const lumaGain = /eye.?white|sirome/i.test(original.name) ? 0.45 : /hair/i.test(original.name) ? 1.7 : 1
-      const handle = createHologramMaterial(map, glyphAtlas, original.side, lumaGain)
+      // Dark hair would vanish additively — lift it, but CAP it: voluminous
+      // light hair stacks shells additively into a white mass otherwise.
+      // Blazing eye whites get damped.
+      const isHair = /hair/i.test(original.name)
+      const lumaGain = /eye.?white|sirome/i.test(original.name) ? 0.45 : isHair ? 1.25 : 1
+      const handle = createHologramMaterial(map, glyphAtlas, original.side, lumaGain, isHair ? 0.55 : 0.9, isHair)
       handles.push(handle)
       return handle.material
     })

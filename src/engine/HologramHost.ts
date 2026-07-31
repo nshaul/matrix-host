@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js'
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js'
 import { VRMLoaderPlugin, VRMUtils, type VRM } from '@pixiv/three-vrm'
 import { createGlyphAtlas } from './glyphTexture'
@@ -12,6 +13,39 @@ import { GestureController } from './gestures'
 import { LipSync } from './lipsync'
 
 export type BackgroundMode = 'matrix' | 'transparent'
+
+/** Film-print pass: fine grain + vignette. Runs after bloom, before output. */
+const FilmGradeShader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    uTime: { value: 0 },
+    uGrain: { value: 0.045 },
+    uVignette: { value: 0.38 },
+  },
+  vertexShader: /* glsl */ `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: /* glsl */ `
+    uniform sampler2D tDiffuse;
+    uniform float uTime;
+    uniform float uGrain;
+    uniform float uVignette;
+    varying vec2 vUv;
+    float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    void main() {
+      vec4 color = texture2D(tDiffuse, vUv);
+      float grain = hash(vUv * vec2(1319.7, 911.3) + fract(uTime) * 713.0) - 0.5;
+      color.rgb += grain * uGrain;
+      float d = distance(vUv, vec2(0.5));
+      color.rgb *= 1.0 - smoothstep(0.4, 0.92, d) * uVignette;
+      gl_FragColor = color;
+    }
+  `,
+}
 
 /**
  * The living hologram host. Owns the scene, the look, the avatar, and the whole
@@ -26,6 +60,7 @@ export class HologramHost {
   private readonly camera: THREE.PerspectiveCamera
   private readonly composer: EffectComposer
   private readonly bloom: UnrealBloomPass
+  private readonly filmGrade: ShaderPass
   private readonly glyphAtlas = createGlyphAtlas()
   private readonly environment = new THREE.Group()
   private readonly rainLayers: RainLayer[] = []
@@ -52,6 +87,10 @@ export class HologramHost {
   constructor(private readonly container: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: false })
     this.renderer.outputColorSpace = THREE.SRGBColorSpace
+    // ACES filmic: the S-curve compresses hologram highlights the way film would —
+    // this is most of the difference between "game glow" and "cinema glow".
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping
+    this.renderer.toneMappingExposure = 1.05
     this.renderer.setClearColor(0x020804, 1)
     this.canvas = this.renderer.domElement
     container.appendChild(this.canvas)
@@ -74,8 +113,10 @@ export class HologramHost {
 
     this.composer = new EffectComposer(this.renderer)
     this.composer.addPass(new RenderPass(this.scene, this.camera))
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.42, 0.45, 0.72)
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.3, 0.5, 0.8)
     this.composer.addPass(this.bloom)
+    this.filmGrade = new ShaderPass(FilmGradeShader)
+    this.composer.addPass(this.filmGrade)
     this.composer.addPass(new OutputPass())
 
     this.installOrbit()
@@ -147,6 +188,24 @@ export class HologramHost {
 
   wave(): void {
     this.gestures?.wave()
+  }
+
+  point(): void {
+    this.gestures?.point()
+  }
+
+  /** Point + finger wag + stern face at the lens. */
+  scold(): void {
+    this.gestures?.scold()
+  }
+
+  /** Lean in, angry, mouth working, pointing — yelling into the camera. */
+  yell(): void {
+    this.gestures?.yell()
+  }
+
+  setEmotion(name: 'angry' | 'happy' | 'sad' | 'relaxed' | 'neutral', weight = 1): void {
+    this.gestures?.setEmotion(name, weight)
   }
 
   /** Speak any audio: URL (ElevenLabs response), Blob/File, or a mic MediaStream. */
@@ -253,11 +312,16 @@ export class HologramHost {
     const dt = Math.min(this.clock.getDelta(), 0.05)
     const elapsed = this.clock.elapsedTime
 
+    // Slow cinematic dolly drift on top of user orbit.
+    const driftYaw = Math.sin(elapsed * 0.1) * 0.045
+    const driftZoom = 1 + Math.sin(elapsed * 0.067) * 0.02
+    const yaw = this.orbitYaw + driftYaw
+    const zoom = this.zoom * driftZoom
     const focus = new THREE.Vector3(0, 1.32, 0)
     this.camera.position.set(
-      focus.x + Math.sin(this.orbitYaw) * Math.cos(this.orbitPitch) * this.zoom,
-      focus.y + Math.sin(this.orbitPitch) * this.zoom * 0.6 + 0.06,
-      focus.z + Math.cos(this.orbitYaw) * Math.cos(this.orbitPitch) * this.zoom,
+      focus.x + Math.sin(yaw) * Math.cos(this.orbitPitch) * zoom,
+      focus.y + Math.sin(this.orbitPitch) * zoom * 0.6 + 0.06,
+      focus.z + Math.cos(yaw) * Math.cos(this.orbitPitch) * zoom,
     )
     this.camera.lookAt(focus)
 
@@ -266,7 +330,8 @@ export class HologramHost {
     const weights = this.lipSync.update(dt)
     const expressions = this.vrm?.expressionManager
     if (expressions) {
-      expressions.setValue('aa', weights.aa)
+      // Gestures may demand the mouth too (yelling) — loudest wins.
+      expressions.setValue('aa', Math.max(weights.aa, this.gestures?.mouthOpen ?? 0))
       expressions.setValue('ih', weights.ih)
       expressions.setValue('ee', weights.ee)
       expressions.setValue('ou', weights.ou)
@@ -277,6 +342,7 @@ export class HologramHost {
 
     for (const handle of this.materialHandles) handle.setTime(elapsed)
     for (const layer of this.rainLayers) layer.update(elapsed)
+    this.filmGrade.uniforms.uTime.value = elapsed
 
     if (this.backgroundMode === 'matrix') this.composer.render()
     else this.renderer.render(this.scene, this.camera)

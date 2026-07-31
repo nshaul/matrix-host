@@ -43,8 +43,14 @@
     <div id="panel">
       <h1>Matrix Host</h1>
       <div class="row">
-        <button id="subject-girl" class="active">Girl</button>
-        <button id="subject-boy">Boy</button>
+        <select id="subject-select">
+          <option value="./avatars/alicia.vrm" selected>Alicia (twin-tails)</option>
+          <option value="./avatars/victoria.vrm">Victoria (woman)</option>
+          <option value="./avatars/schoolgirl.vrm">School girl</option>
+          <option value="./avatars/guy.vrm">Guy</option>
+          <option value="./avatars/girl.vrm">Girl (short hair)</option>
+          <option value="./avatars/boy.vrm">Boy</option>
+        </select>
         <label class="file">Drop-in VRM<input id="subject-file" type="file" accept=".vrm,.glb" /></label>
       </div>
       <div class="group">
@@ -59,6 +65,18 @@
         <label>Head pitch <input id="pitch" type="range" min="-30" max="30" value="0" /></label>
         <div class="row">
           <button id="wave">👋 Wave</button>
+          <button id="point">👉 Point</button>
+          <button id="scold">🫵 Scold</button>
+          <button id="yell">😠 Yell</button>
+        </div>
+        <div class="row">
+          <select id="emotion">
+            <option value="neutral" selected>Neutral</option>
+            <option value="happy">Happy</option>
+            <option value="angry">Angry</option>
+            <option value="sad">Sad</option>
+            <option value="relaxed">Relaxed</option>
+          </select>
           <button id="orbit">Orbit: drag</button>
         </div>
       </div>

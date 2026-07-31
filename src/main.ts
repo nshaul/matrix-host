@@ -30,17 +30,11 @@ host.onFps((value) => {
 })
 
 // ----- subject switching -----
-const girlButton = $<HTMLButtonElement>('subject-girl')
-const boyButton = $<HTMLButtonElement>('subject-boy')
+const subjectSelect = $<HTMLSelectElement>('subject-select')
 const fileInput = $<HTMLInputElement>('subject-file')
 let subjectUrl: string | null = null
 
-function markSubject(active: HTMLButtonElement | null) {
-  for (const b of [girlButton, boyButton]) b.classList.toggle('active', b === active)
-}
-
-async function swapSubject(url: string, active: HTMLButtonElement | null) {
-  markSubject(active)
+async function swapSubject(url: string) {
   try {
     await host.loadSubject(url)
   } catch (error) {
@@ -48,14 +42,13 @@ async function swapSubject(url: string, active: HTMLButtonElement | null) {
   }
 }
 
-girlButton.onclick = () => void swapSubject('./avatars/alicia.vrm', girlButton)
-boyButton.onclick = () => void swapSubject('./avatars/boy.vrm', boyButton)
+subjectSelect.onchange = () => void swapSubject(subjectSelect.value)
 fileInput.onchange = () => {
   const file = fileInput.files?.item(0)
   if (!file) return
   if (subjectUrl) URL.revokeObjectURL(subjectUrl)
   subjectUrl = URL.createObjectURL(file)
-  void swapSubject(subjectUrl, null)
+  void swapSubject(subjectUrl)
   fileInput.value = ''
 }
 
@@ -83,6 +76,12 @@ const applyLook = () => host.setHeadLook(Number(yaw.value), Number(pitch.value))
 yaw.oninput = applyLook
 pitch.oninput = applyLook
 $<HTMLButtonElement>('wave').onclick = () => host.wave()
+$<HTMLButtonElement>('point').onclick = () => host.point()
+$<HTMLButtonElement>('scold').onclick = () => host.scold()
+$<HTMLButtonElement>('yell').onclick = () => host.yell()
+$<HTMLSelectElement>('emotion').onchange = (event) => {
+  host.setEmotion((event.target as HTMLSelectElement).value as 'neutral' | 'happy' | 'angry' | 'sad' | 'relaxed')
+}
 $<HTMLButtonElement>('orbit').onclick = () => {
   status.textContent = 'drag the stage to orbit, wheel to zoom'
 }
@@ -121,4 +120,4 @@ recordButton.onclick = async () => {
 }
 
 // ----- boot -----
-void swapSubject('./avatars/alicia.vrm', girlButton)
+void swapSubject(subjectSelect.value)

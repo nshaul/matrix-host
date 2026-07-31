@@ -1,4 +1,5 @@
 import { HologramHost } from './engine/HologramHost'
+import { HostVoice, VoiceCommands, type VoiceEngine } from './voice'
 
 const stage = document.getElementById('stage')
 if (!stage) throw new Error('missing #stage element')
@@ -7,9 +8,11 @@ const host = new HologramHost(stage)
 
 // Expose the control surface for external drivers (ElevenLabs glue, stream deck,
 // livestream tooling): window.matrixHost.speak(url), .wave(), .setHeadLook(...)
+// and window.hostVoice.speak('hello', { engine: 'system' })
 declare global {
   interface Window {
     matrixHost: HologramHost
+    hostVoice: HostVoice
   }
 }
 window.matrixHost = host
@@ -84,6 +87,128 @@ $<HTMLSelectElement>('emotion').onchange = (event) => {
 }
 $<HTMLButtonElement>('orbit').onclick = () => {
   status.textContent = 'drag the stage to orbit, wheel to zoom'
+}
+
+// ----- voice: the host's own voice (system / kokoro / elevenlabs) -----
+const hostVoice = new HostVoice(host, (message) => {
+  status.textContent = message
+})
+window.hostVoice = hostVoice
+
+const engineSelect = $<HTMLSelectElement>('voice-engine')
+const voiceSelect = $<HTMLSelectElement>('voice-name')
+const keyRow = $('eleven-key-row')
+const keyInput = $<HTMLInputElement>('eleven-key')
+const sayText = $<HTMLInputElement>('say-text')
+const sayButton = $<HTMLButtonElement>('say')
+
+const currentEngine = (): VoiceEngine => engineSelect.value as VoiceEngine
+// An empty key field means "no key provided" — HostVoice then fails loud for elevenlabs.
+const currentKey = (): string | undefined => {
+  const key = keyInput.value.trim()
+  return key === '' ? undefined : key
+}
+// '' is the "Default voice" option — each engine documents its own default voice.
+const currentVoice = (): string | undefined => {
+  return voiceSelect.value === '' ? undefined : voiceSelect.value
+}
+
+let voiceListSeq = 0
+async function refreshVoices() {
+  const seq = ++voiceListSeq
+  const engine = currentEngine()
+  const voices = await hostVoice.listVoices(engine, currentKey())
+  if (seq !== voiceListSeq) return // engine switched while the list loaded
+  voiceSelect.innerHTML = ''
+  if (voices.length === 0) {
+    const option = document.createElement('option')
+    option.value = ''
+    option.textContent = 'Default voice'
+    voiceSelect.appendChild(option)
+    return
+  }
+  for (const voice of voices) {
+    const option = document.createElement('option')
+    option.value = voice.id
+    option.textContent = voice.label
+    voiceSelect.appendChild(option)
+  }
+}
+
+engineSelect.onchange = () => {
+  keyRow.hidden = currentEngine() !== 'elevenlabs'
+  void refreshVoices()
+}
+keyInput.onchange = () => {
+  if (currentEngine() === 'elevenlabs') void refreshVoices()
+}
+
+function sayIt() {
+  const text = sayText.value.trim()
+  if (!text) {
+    status.textContent = 'type something to say first'
+    return
+  }
+  hostVoice.speak(text, { engine: currentEngine(), voice: currentVoice(), apiKey: currentKey() }).catch(() => {
+    // error message already on the status line via HostVoice's status callback
+  })
+}
+sayButton.onclick = sayIt
+sayText.onkeydown = (event) => {
+  if (event.key === 'Enter') sayIt()
+}
+void refreshVoices()
+
+// ----- voice control: spoken commands drive the host -----
+const voiceControlButton = $<HTMLButtonElement>('voice-control')
+const voiceCommands = new VoiceCommands({
+  onStatus: (message) => {
+    status.textContent = message
+  },
+  onStateChange: (active) => {
+    voiceControlButton.classList.toggle('active', active)
+  },
+  onAction: (action) => {
+    switch (action.type) {
+      case 'wave':
+        host.wave()
+        break
+      case 'point':
+        host.point()
+        break
+      case 'scold':
+        host.scold()
+        break
+      case 'yell':
+        host.yell()
+        break
+      case 'look':
+        yaw.value = String(action.yaw)
+        pitch.value = String(action.pitch)
+        host.setHeadLook(action.yaw, action.pitch)
+        break
+      case 'emotion':
+        $<HTMLSelectElement>('emotion').value = action.name
+        host.setEmotion(action.name)
+        break
+      case 'background':
+        // Route through the buttons so panel state stays consistent.
+        if (action.mode === 'transparent') bgTransparent.click()
+        else bgMatrix.click()
+        break
+      case 'say':
+        hostVoice.speak(action.text, { engine: currentEngine(), voice: currentVoice(), apiKey: currentKey() }).catch(() => {
+          // error message already on the status line via HostVoice's status callback
+        })
+        break
+      case 'stop-listening':
+        break // VoiceCommands stops itself; onStateChange resets the button
+    }
+  },
+})
+voiceControlButton.onclick = () => {
+  if (voiceCommands.active) voiceCommands.stop()
+  else voiceCommands.start()
 }
 
 // ----- talk -----

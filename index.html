@@ -32,6 +32,13 @@
       #panel button.active { background: #1e5c36; }
       #panel button:disabled { opacity: .4; cursor: not-allowed; }
       #panel input[type="range"] { width: 100%; accent-color: #43e07c; }
+      #panel input[type="text"], #panel input[type="password"] {
+        font: inherit; color: #d7ffe6; background: #0a2415; border: 1px solid #1e5c36;
+        border-radius: 6px; padding: 5px 8px; flex: 1; min-width: 0;
+      }
+      #panel input[type="text"]::placeholder, #panel input[type="password"]::placeholder { color: #5a8a6c; }
+      #panel select { max-width: 100%; }
+      #panel .row[hidden] { display: none; }
       #panel .hint { color: #5a8a6c; font-size: 11px; }
       #panel input[type="file"] { display: none; }
       #fps { position: fixed; right: 12px; top: 12px; z-index: 10; font: 11px ui-monospace, monospace; color: #43e07c; background: #04140acc; padding: 4px 8px; border-radius: 6px; border: 1px solid #1e5c36; }
@@ -82,11 +89,31 @@
       </div>
       <div class="group">
         <div class="row">
-          <button id="speak-demo">🗣 Speak (demo)</button>
+          <select id="voice-engine">
+            <option value="system" selected>System voice · instant</option>
+            <option value="kokoro">Kokoro neural · free, downloads once</option>
+            <option value="elevenlabs">ElevenLabs · your key</option>
+          </select>
+        </div>
+        <div class="row" id="eleven-key-row" hidden>
+          <input id="eleven-key" type="password" autocomplete="off" placeholder="ElevenLabs key — kept in memory only" />
+        </div>
+        <div class="row">
+          <select id="voice-name"></select>
+        </div>
+        <div class="row">
+          <input id="say-text" type="text" placeholder="Type a line, press Enter…" />
+          <button id="say">Say</button>
+        </div>
+        <div class="row">
+          <button id="voice-control">🎧 Voice control</button>
+        </div>
+        <span class="hint">Voice control: “wave”, “look left”, “be happy”, “say hello”, “stop listening”</span>
+        <div class="row">
+          <button id="speak-demo">🗣 Demo</button>
           <label class="file">Audio file<input id="speak-file" type="file" accept="audio/*" /></label>
           <button id="mic">🎙 Mic</button>
         </div>
-        <span class="hint">Wire ElevenLabs: host.speak(audioUrl)</span>
       </div>
       <div class="group">
         <div class="row">

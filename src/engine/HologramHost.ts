@@ -79,6 +79,7 @@ export class HologramHost {
   private disposed = false
   private speakingAudio: HTMLAudioElement | null = null
   private speakingUrl: string | null = null
+  private externalVisemes: { aa: number; ih: number; ou: number; ee: number; oh: number } | null = null
   private statusHandler: (message: string) => void = () => {}
   private fpsHandler: (fps: number) => void = () => {}
   private frameCount = 0
@@ -234,6 +235,17 @@ export class HologramHost {
     this.statusHandler('demo speech (procedural formants)')
   }
 
+  /**
+   * Externally-driven mouth (system-voice TTS has no analysable audio stream, so
+   * its driver feeds viseme weights straight in). Pass null to return control to
+   * the audio analyser.
+   */
+  setVisemes(weights: { aa?: number; ih?: number; ou?: number; ee?: number; oh?: number } | null): void {
+    this.externalVisemes = weights
+      ? { aa: weights.aa ?? 0, ih: weights.ih ?? 0, ou: weights.ou ?? 0, ee: weights.ee ?? 0, oh: weights.oh ?? 0 }
+      : null
+  }
+
   stopSpeaking(): void {
     this.speakingAudio?.pause()
     this.speakingAudio = null
@@ -327,7 +339,8 @@ export class HologramHost {
 
     this.gestures?.update(dt)
 
-    const weights = this.lipSync.update(dt)
+    const weights = this.externalVisemes ?? this.lipSync.update(dt)
+    if (this.externalVisemes) this.lipSync.update(dt) // keep analyser smoothing warm
     const expressions = this.vrm?.expressionManager
     if (expressions) {
       // Gestures may demand the mouth too (yelling) — loudest wins.

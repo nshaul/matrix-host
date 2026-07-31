@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@pixiv/three-vrm": "^3.4.4",
+    "kokoro-js": "^1.2.1",
     "three": "^0.182.0"
   },
   "devDependencies": {

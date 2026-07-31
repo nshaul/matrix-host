@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#020804" />
+    <title>Matrix Host — living footage</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { height: 100%; background: #020804; overflow: hidden; }
+      body.transparent-mode.show-checker {
+        background: repeating-conic-gradient(#2a2a2a 0% 25%, #3a3a3a 0% 50%) 0 0 / 28px 28px;
+      }
+      #stage { position: fixed; inset: 0; }
+      #stage canvas { width: 100%; height: 100%; display: block; }
+      #panel {
+        position: fixed; top: 12px; left: 12px; z-index: 10;
+        display: flex; flex-direction: column; gap: 8px;
+        font: 12px/1.4 ui-monospace, Consolas, monospace; color: #baf5d0;
+        background: #04140acc; border: 1px solid #1e5c36; border-radius: 10px;
+        padding: 12px; width: 230px; backdrop-filter: blur(6px);
+      }
+      #panel h1 { font-size: 12px; letter-spacing: .14em; color: #6fe89b; text-transform: uppercase; }
+      #panel .row { display: flex; gap: 6px; flex-wrap: wrap; }
+      #panel button, #panel label.file {
+        font: inherit; color: #d7ffe6; background: #0a2415; border: 1px solid #1e5c36;
+        border-radius: 6px; padding: 5px 8px; cursor: pointer;
+      }
+      #panel button:hover, #panel label.file:hover { background: #123a22; }
+      #panel button.active { background: #1e5c36; }
+      #panel .hint { color: #5a8a6c; font-size: 11px; }
+      #panel input[type="file"] { display: none; }
+      #panel .group { border-top: 1px solid #1e5c36; padding-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+      #panel a { color: #6fe89b; }
+    </style>
+  </head>
+  <body>
+    <div id="stage"></div>
+    <div id="panel">
+      <h1>Living Footage</h1>
+      <span class="hint">AI-video pixels, directed live. <a href="./index.html">3D engine →</a></span>
+      <div class="group">
+        <div class="row" id="segment-buttons"></div>
+        <span class="hint">Idle loops on its own; gestures return home.</span>
+      </div>
+      <div class="group">
+        <div class="row">
+          <button id="bg-scene" class="active">Scene</button>
+          <button id="bg-transparent">Transparent</button>
+        </div>
+        <span class="hint">Transparent = luma-key alpha for OBS/Whatnot</span>
+      </div>
+      <div class="group">
+        <div class="row">
+          <button id="speak-demo">🗣 Speak (demo)</button>
+          <label class="file">Audio<input id="speak-file" type="file" accept="audio/*" /></label>
+          <button id="mic">🎙 Mic</button>
+        </div>
+        <span class="hint">Mouth-warp lip-sync on front-facing segments</span>
+      </div>
+      <div class="group">
+        <div class="row"><button id="record">● Record 8s</button></div>
+        <span class="hint" id="status">loading footage…</span>
+      </div>
+    </div>
+    <script type="module" src="/src/footage.ts"></script>
+  </body>
+</html>

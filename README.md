@@ -57,6 +57,22 @@ const blob = await response.blob()
 await matrixHost.speak(blob)                          // mouth syncs automatically
 ```
 
+## Living Footage mode (`footage.html`) — AI-video pixels, directed live
+
+The 3D engine can't match offline AI-video photorealism — nothing real-time can.
+So this mode inverts the job: the browser doesn't *synthesize* the host, it
+*directs* AI-generated footage. `FootageHost` runs a segment state machine over
+a source video (idle loops seamlessly through double-buffered crossfades;
+`playSegment('reach')` plays a gesture and returns home), renders a **live**
+matrix layer on top (glyph churn, rain, film grade — the frame is never a
+static movie), warps the mouth per-viseme from real audio (`speak(url)`) using
+per-segment mouth anchors, and luma-keys the figure for true-alpha OBS overlay.
+
+The bundled `public/footage/reference.mp4` is a dev-only calibration asset (from
+the owner-supplied X reference). For production, generate your own clips (any AI
+video service — same character, one clip per motion), drop them in, and remap
+`SEGMENTS` in `src/footage.ts` — the engine is footage-agnostic.
+
 ## The look (src/engine/)
 
 | File | What it owns |

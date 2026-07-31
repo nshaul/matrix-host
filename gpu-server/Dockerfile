@@ -1,10 +1,11 @@
-# Matrix Host GPU streaming server.
-# CPU plumbing image; for model adapters start FROM a CUDA base instead:
-#   FROM nvidia/cuda:12.4.1-runtime-ubuntu22.04
+# Matrix Host GPU streaming server — CPU/transport-only image (GENERATOR=cpu).
+# Model tiers (musetalk/ditto) build from ./Dockerfile.gpu instead.
+# Place reference.mp4 next to this file before building (bootstrap.sh copies it
+# from ../public/footage on a checkout).
 FROM python:3.12-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgl1 libglib2.0-0 ffmpeg && rm -rf /var/lib/apt/lists/*
+    libgl1 libglib2.0-0 ffmpeg espeak-ng && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 COPY requirements.txt .

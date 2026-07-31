@@ -155,7 +155,6 @@ export class HandController {
     // thumbs-up curl backward instead of extending.
     const spreadSign = this.side === 'right' ? -1 : 1
     const acrossSign = spreadSign
-    const outSign = -spreadSign
 
     for (let f = 0; f < FINGERS.length; f += 1) {
       const curl = pose[FINGER_CHANNEL[FINGERS[f]]]

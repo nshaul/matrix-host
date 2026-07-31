@@ -82,6 +82,8 @@ export class GestureController {
   private pointHand: HandSide = 'right'
   /** World-space point target — the host feeds this every frame while pointing. */
   private readonly aimTarget = new THREE.Vector3(0, 1.4, 3)
+  /** Where the eyes/head act toward (exact screen point; arm may be offset). */
+  private readonly lookAim = new THREE.Vector3(0, 1.4, 3)
 
   private headYawTarget = 0
   private headPitchTarget = 0
@@ -182,6 +184,17 @@ export class GestureController {
 
   setAimTargetWorld(target: THREE.Vector3): void {
     this.aimTarget.copy(target)
+    this.lookAim.copy(target)
+  }
+
+  /** Separate arm and gaze targets (composition offset vs exact screen point). */
+  setAimTargets(armTarget: THREE.Vector3, lookTarget: THREE.Vector3): void {
+    this.aimTarget.copy(armTarget)
+    this.lookAim.copy(lookTarget)
+  }
+
+  get pointingHand(): HandSide {
+    return this.pointHand
   }
 
   setEmotion(name: 'angry' | 'happy' | 'sad' | 'relaxed' | 'neutral', weight = 1): void {
@@ -339,7 +352,7 @@ export class GestureController {
     if (!pivot || !pivot.parent || !this.headForwardLocal) return { yaw: 0, pitch: 0 }
     const f0 = this.headForwardLocal
     ;(head ?? pivot).getWorldPosition(_v1)
-    _v2.copy(this.aimTarget).sub(_v1).normalize()
+    _v2.copy(this.lookAim).sub(_v1).normalize()
     pivot.parent.getWorldQuaternion(_q1).invert()
     const d = _v2.applyQuaternion(_q1)
     _v3.copy(UP).cross(f0) // ŷ × f0: the direction rotation.y(+) moves the face
@@ -437,10 +450,12 @@ export class GestureController {
       this.setRotation('rightHand' as VRMHumanBoneName, 0, swing * 0.22, swing)
     } else if (active === 'thumbsUp') {
       const env = envelope(gt, this.gestureDuration, 0.4, 0.45)
-      // Forearm raised toward the lens, fist up, thumb out.
-      this.setRotation('rightUpperArm' as VRMHumanBoneName, -0.1 * env, -0.35 * env, -1.18 + env * 0.62)
-      this.setRotation('rightLowerArm' as VRMHumanBoneName, 0, env * 0.5, -0.1 - env * 1.42)
-      this.setRotation('rightHand' as VRMHumanBoneName, 0, 0, -0.1 * env)
+      // Same fold sign the wave verified (+z raises the forearm; −z buried the
+      // fist at the hip): elbow low, forearm folded UP so the fist presents at
+      // shoulder height, angled a touch toward the lens.
+      this.setRotation('rightUpperArm' as VRMHumanBoneName, -0.12 * env, -0.22 * env, -1.18 + env * 0.55)
+      this.setRotation('rightLowerArm' as VRMHumanBoneName, 0, env * 0.42, -0.1 + env * 1.62)
+      this.setRotation('rightHand' as VRMHumanBoneName, 0, 0, 0.12 * env)
     } else if (active === 'point') {
       const env = envelope(gt, this.gestureDuration, 0.5, 0.55)
       const follow = this.aimHeadAngles()
@@ -461,7 +476,7 @@ export class GestureController {
       this.solvePointArm(this.pointHand, env, gt)
       if (env > 0.05) {
         this.lookTargetActive = true
-        this.lookTargetWorld.copy(this.aimTarget)
+        this.lookTargetWorld.copy(this.lookAim)
       }
     }
 

@@ -397,21 +397,38 @@ export class HologramHost {
     )
   }
 
+  /** A world point `reach` metres down the camera ray through screen (x,y). */
+  private screenRayPoint(x: number, y: number, reach: number, out: THREE.Vector3): THREE.Vector3 {
+    const ndc = out.set(x * 2 - 1, -(y * 2 - 1), 0.5)
+    ndc.unproject(this.camera)
+    const dir = ndc.sub(this.camera.position).normalize()
+    return dir.multiplyScalar(reach).add(this.camera.position)
+  }
+
   /**
-   * Convert the requested screen point into a world aim target: any point on
-   * the camera ray through (x,y) projects back to exactly (x,y), so aiming the
-   * finger at a point partway down that ray reads as pointing at that screen
-   * position — and at (0.5,0.5) as jabbing straight into the lens.
+   * Convert the requested screen point into world aim targets. Eyes and head
+   * aim at the EXACT point; the arm aims at a composition-offset point shifted
+   * toward the pointing hand's own screen side and slightly low — the way an
+   * actor points into a lens — so the fist never parks in front of the face
+   * and the additive shells don't stack into a white ball. The offset fades to
+   * zero away from frame center, keeping corner points exact.
    */
   private updateAimTarget(): void {
     if (!this.pointScreen || !this.gestures) return
     this.camera.updateMatrixWorld()
-    const ndc = this.aimWork.set(this.pointScreen.x * 2 - 1, -(this.pointScreen.y * 2 - 1), 0.5)
-    ndc.unproject(this.camera)
-    const dir = ndc.sub(this.camera.position).normalize()
-    const reach = Math.max(0.35, this.camera.position.distanceTo(new THREE.Vector3(0, this.focusY, 0)) * 0.45)
-    const target = dir.multiplyScalar(reach).add(this.camera.position)
-    this.gestures.setAimTargetWorld(target)
+    // Gaze reach stays SHORT of the subject (between camera and body): a longer
+    // ray lands behind her and she turns away from the lens while pointing at it.
+    const camDist = this.camera.position.distanceTo(this.aimWork.set(0, this.focusY, 0))
+    const look = this.screenRayPoint(this.pointScreen.x, this.pointScreen.y, Math.max(0.35, camDist * 0.45), new THREE.Vector3())
+
+    const hand = this.gestures.pointingHand
+    const centered = 1 - Math.min(1, Math.hypot(this.pointScreen.x - 0.5, this.pointScreen.y - 0.5) * 2.2)
+    const ax = Math.min(1, Math.max(0, this.pointScreen.x + (hand === 'right' ? -0.13 : 0.13) * centered))
+    const ay = Math.min(1, Math.max(0, this.pointScreen.y + 0.17 * centered))
+    const armReach = Math.max(0.3, camDist * 0.3)
+    const arm = this.screenRayPoint(ax, ay, armReach, new THREE.Vector3())
+
+    this.gestures.setAimTargets(arm, look)
   }
 
   private resize(): void {

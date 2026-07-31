@@ -9,6 +9,7 @@ export default defineConfig({
       input: {
         main: resolve(__dirname, 'index.html'),
         footage: resolve(__dirname, 'footage.html'),
+        stream: resolve(__dirname, 'stream.html'),
       },
     },
   },

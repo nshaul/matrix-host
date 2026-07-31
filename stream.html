@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#020804" />
+    <title>Matrix Host — GPU stream</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { height: 100%; background: #020804; overflow: hidden; }
+      #stage { position: fixed; inset: 0; display: grid; place-items: center; }
+      #stage canvas, #stage video { max-width: 100%; max-height: 100%; }
+      #panel {
+        position: fixed; top: 12px; left: 12px; z-index: 10;
+        display: flex; flex-direction: column; gap: 8px;
+        font: 12px/1.4 ui-monospace, Consolas, monospace; color: #baf5d0;
+        background: #04140acc; border: 1px solid #1e5c36; border-radius: 10px;
+        padding: 12px; width: 250px; backdrop-filter: blur(6px);
+      }
+      #panel h1 { font-size: 12px; letter-spacing: .14em; color: #6fe89b; text-transform: uppercase; }
+      #panel input[type="text"] { font: inherit; color: #d7ffe6; background: #0a2415; border: 1px solid #1e5c36; border-radius: 6px; padding: 5px 8px; width: 100%; }
+      #panel button { font: inherit; color: #d7ffe6; background: #0a2415; border: 1px solid #1e5c36; border-radius: 6px; padding: 5px 8px; cursor: pointer; }
+      #panel button:hover { background: #123a22; }
+      #panel .row { display: flex; gap: 6px; }
+      #panel .hint { color: #5a8a6c; font-size: 11px; }
+      #panel a { color: #6fe89b; }
+    </style>
+  </head>
+  <body>
+    <div id="stage"></div>
+    <div id="panel">
+      <h1>GPU Stream</h1>
+      <span class="hint">Real generated frames from the render server. <a href="./footage.html">footage →</a></span>
+      <div class="row">
+        <input id="server" type="text" value="ws://localhost:8789" title="ws:// dev streamer or http(s)://…/offer for WebRTC" />
+      </div>
+      <div class="row">
+        <button id="connect">Connect</button>
+        <button id="disconnect" disabled>Stop</button>
+      </div>
+      <div class="row">
+        <input id="say" type="text" placeholder="command: say something…" />
+        <button id="send">Send</button>
+      </div>
+      <span class="hint" id="status">not connected</span>
+      <span class="hint" id="stats"></span>
+    </div>
+    <script type="module" src="/src/stream.ts"></script>
+  </body>
+</html>

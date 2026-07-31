@@ -45,12 +45,23 @@ wss.on('connection', (ws) => {
 
   ws.on('message', (data, isBinary) => {
     if (isBinary) return
-    // Command channel: echo with ok:true — the GPU generator handles these for real.
+    // Command channel: replies mirror the GPU server's (server.py CommandRouter)
+    // shapes so the client UI exercises realistic status either way.
+    let message
     try {
-      const message = JSON.parse(String(data))
-      ws.send(JSON.stringify({ ok: true, echo: message }))
+      message = JSON.parse(String(data))
     } catch (error) {
-      ws.send(JSON.stringify({ ok: false, detail: String(error) }))
+      ws.send(JSON.stringify({ ok: false, error: String(error) }))
+      return
+    }
+    if (message.cmd === 'speak') {
+      ws.send(JSON.stringify({ ok: true, spoke: { engine: 'dev-echo', seconds: 0, samples: 0, text: message.text ?? null } }))
+    } else if (message.cmd === 'stop') {
+      ws.send(JSON.stringify({ ok: true, stopped: true }))
+    } else if (message.cmd === 'status') {
+      ws.send(JSON.stringify({ ok: true, generator: 'dev-mjpeg', model_ready: true, uptime_s: Math.round(process.uptime()), gpu: null, fps: 30 }))
+    } else {
+      ws.send(JSON.stringify({ ok: false, error: `unknown cmd ${JSON.stringify(message.cmd)}`, known: ['speak', 'stop', 'status'] }))
     }
   })
 

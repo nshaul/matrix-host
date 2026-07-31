@@ -1,5 +1,7 @@
+# Transport tier ONLY — enough to run GENERATOR=cpu (WebRTC video+audio plumbing)
+# on any box, GPU or not. Model/TTS deps live in requirements-gpu.txt.
 aiohttp>=3.9
 aiortc>=1.9
-av>=12
+av>=12,<15
 numpy>=1.26
 opencv-python-headless>=4.9

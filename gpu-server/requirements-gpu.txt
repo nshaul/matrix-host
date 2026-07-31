@@ -1,0 +1,33 @@
+# Model + TTS tier — install AFTER requirements.txt (bootstrap.sh does both).
+#
+# torch is deliberately NOT pinned here: the box's CUDA build decides the wheel.
+# The RunPod PyTorch template already ships a matching torch, and bootstrap.sh
+# installs the cu121 wheel only when one is missing — a pin here would fight
+# both and drag a second 2.5 GB torch into the env.
+
+# --- TTS (Apache-2.0) -------------------------------------------------------
+kokoro>=0.9.4            # hexgrad/Kokoro-82M pipeline (needs apt espeak-ng for OOD words)
+soundfile>=0.12          # wav I/O
+
+# --- weight provisioning ----------------------------------------------------
+huggingface_hub[cli]>=0.23   # huggingface-cli used by bootstrap.sh downloads
+
+# --- MuseTalk runtime extras ------------------------------------------------
+# Their documented pins (MuseTalk requirements.txt); mm-stack (mmengine/mmcv/
+# mmdet/mmpose) is installed by bootstrap.sh via openmim because those builds
+# must match the installed torch, which pip cannot express here.
+diffusers==0.30.2
+transformers==4.39.2
+accelerate==0.28.0
+einops>=0.7
+omegaconf>=2.3
+librosa>=0.10
+imageio[ffmpeg]>=2.31
+moviepy>=1.0.3
+
+# --- Ditto (PyTorch backend) extras -----------------------------------------
+# TensorRT backend needs tensorrt/polygraphy/cuda-python on top — not installed
+# here; the default DITTO_CFG_PKL uses the PyTorch checkpoints.
+scikit-image>=0.22
+filetype>=1.2
+tqdm>=4.66

@@ -1,0 +1,32 @@
+# Matrix Host GPU streaming server — GPU image (model tiers).
+# CPU/transport-only image: see ./Dockerfile.
+#
+# Build (weights bake into the image for the chosen tier):
+#   docker build -f Dockerfile.gpu --build-arg GENERATOR=musetalk -t matrix-host-gpu .
+# Run (needs nvidia-container-toolkit):
+#   docker run --gpus all -p 8788:8788 matrix-host-gpu
+#
+# Base ships torch 2.4.0 + CUDA 12.1 + cuDNN 9 — bootstrap.sh detects it and
+# skips the torch install.
+FROM pytorch/pytorch:2.4.0-cuda12.1-cudnn9-runtime
+
+ARG GENERATOR=cpu
+ENV GENERATOR=${GENERATOR} \
+    PIP_NO_CACHE_DIR=1 \
+    DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git ffmpeg espeak-ng libgl1 libglib2.0-0 curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY . /app/
+
+# Bootstrap at build time for the chosen GENERATOR:
+#   SKIP_VENV      — the container IS the environment
+#   SKIP_SELFTEST  — no GPU at build time; the selftest gates container START instead
+RUN SKIP_VENV=1 SKIP_SELFTEST=1 bash bootstrap.sh
+
+EXPOSE 8788
+# Selftest-then-serve: a container that cannot prove readiness never answers /offer.
+CMD ["bash", "-lc", "python server.py --selftest && exec python server.py"]

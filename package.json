@@ -1,0 +1,22 @@
+{
+  "name": "matrix-host",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Browser-native Matrix-hologram digital host: rigged 3D avatar (swappable girl/boy/logo), hologram shader, controllable head, audio-driven lip-sync (ElevenLabs-ready).",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -b --pretty false"
+  },
+  "dependencies": {
+    "@pixiv/three-vrm": "^3.4.4",
+    "three": "^0.182.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.182.0",
+    "typescript": "^5.7.3",
+    "vite": "^7.3.4"
+  }
+}
